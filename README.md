@@ -44,6 +44,7 @@ composer require hadder/nfse-nacional
 - consultarNfseChave
 - consultarDpsChave
 - consultarNfseEventos
+- consultarCancelamentoNfse
 - consultarDanfse
 - enviaDps
 - cancelaNfse

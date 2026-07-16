@@ -7,6 +7,13 @@ use NFePHP\Common\Certificate;
 
 class Tools extends RestCurl
 {
+    private const CANCELAMENTO_EVENTOS = [
+        'e101101' => 'cancelamento',
+        'e105102' => 'cancelamento_substituicao',
+        'e105104' => 'cancelamento_deferido_analise_fiscal',
+        'e305101' => 'cancelamento_oficio',
+    ];
+
     public function __construct(string $config, Certificate $cert)
     {
         parent::__construct($config, $cert);
@@ -51,6 +58,23 @@ class Tools extends RestCurl
 
         $retorno = $this->getData($operacao);
         return $retorno;
+    }
+
+    public function consultarCancelamentoNfse($chave)
+    {
+        $retorno = $this->consultarNfseEventos($chave);
+
+        if (!is_array($retorno) || isset($retorno['erro'])) {
+            return $retorno;
+        }
+
+        $eventosCancelamento = $this->extractCancelamentoEventos($retorno);
+
+        return [
+            'cancelada' => !empty($eventosCancelamento),
+            'eventos' => $eventosCancelamento,
+            'retorno' => $retorno
+        ];
     }
 
     public function consultarDanfse($chave)
@@ -132,5 +156,57 @@ class Tools extends RestCurl
         $dom->loadXML($content);
         dump($dom->saveXML());
         return $dom->C14N(false, false, null, null);
+    }
+
+    private function extractCancelamentoEventos(array $payload): array
+    {
+        $eventos = [];
+        $this->walkEventos($payload, $eventos);
+
+        return array_values($eventos);
+    }
+
+    private function walkEventos(array $node, array &$eventos): void
+    {
+        $eventoNormalizado = $this->normalizeCancelamentoEvento($node);
+        if ($eventoNormalizado !== null) {
+            $hash = $eventoNormalizado['hash'];
+            unset($eventoNormalizado['hash']);
+            $eventos[$hash] = $eventoNormalizado;
+        }
+
+        foreach ($node as $value) {
+            if (is_array($value)) {
+                $this->walkEventos($value, $eventos);
+            }
+        }
+    }
+
+    private function normalizeCancelamentoEvento(array $evento): ?array
+    {
+        foreach (self::CANCELAMENTO_EVENTOS as $codigoEvento => $tipo) {
+            if (!isset($evento[$codigoEvento]) || !is_array($evento[$codigoEvento])) {
+                continue;
+            }
+
+            $detalhes = $evento[$codigoEvento];
+            $sequencial = $evento['nSeqEvento'] ?? $evento['nSequencial'] ?? $evento['nseqevento'] ?? null;
+            $dataEvento = $evento['dhEvento'] ?? $evento['dhProc'] ?? $evento['dhevento'] ?? $evento['dhproc'] ?? null;
+
+            return [
+                'hash' => md5(json_encode([$codigoEvento, $sequencial, $dataEvento, $detalhes])),
+                'tipo' => $tipo,
+                'codigoEvento' => $codigoEvento,
+                'sequencial' => $sequencial,
+                'dataEvento' => $dataEvento,
+                'descricao' => $detalhes['xDesc'] ?? $detalhes['xdesc'] ?? null,
+                'codigoMotivo' => $detalhes['cMotivo'] ?? $detalhes['cmotivo'] ?? null,
+                'motivo' => $detalhes['xMotivo'] ?? $detalhes['xmotivo'] ?? null,
+                'chaveSubstituta' => $detalhes['chSubstituta'] ?? $detalhes['chsubstituta'] ?? null,
+                'raw' => $evento
+            ];
+        }
+
+        return null;
     }
 }
