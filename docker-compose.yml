@@ -1,0 +1,17 @@
+services:
+    nfse-nacional:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        environment:
+            PHP_IDE_CONFIG: "serverName=nfse-nacional"
+        volumes:
+            - .:/var/www/nfsenacional
+        ports:
+            - 3001:80
+
+volumes:
+###> symfony/mercure-bundle ###
+    mercure_data:
+    mercure_config:
+###< symfony/mercure-bundle ###
